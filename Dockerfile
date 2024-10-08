@@ -1,14 +1,12 @@
 FROM ubuntu:22.04
 
 ARG WARP_VERSION
-ARG GOST_VERSION
 ARG COMMIT_SHA
 ARG TARGETPLATFORM
 
 LABEL org.opencontainers.image.authors="cmj2002"
 LABEL org.opencontainers.image.url="https://github.com/cmj2002/warp-docker"
 LABEL WARP_VERSION=${WARP_VERSION}
-LABEL GOST_VERSION=${GOST_VERSION}
 LABEL COMMIT_SHA=${COMMIT_SHA}
 
 COPY entrypoint.sh /entrypoint.sh
@@ -30,10 +28,6 @@ RUN case ${TARGETPLATFORM} in \
     apt-get install -y cloudflare-warp && \
     apt-get clean && \
     apt-get autoremove -y && \
-    curl -LO https://github.com/ginuerzh/gost/releases/download/v${GOST_VERSION}/gost-linux-${ARCH}-${GOST_VERSION}.gz && \
-    gunzip gost-linux-${ARCH}-${GOST_VERSION}.gz && \
-    mv gost-linux-${ARCH}-${GOST_VERSION} /usr/bin/gost && \
-    chmod +x /usr/bin/gost && \
     chmod +x /entrypoint.sh && \
     chmod +x /healthcheck/index.sh && \
     useradd -m -s /bin/bash warp && \
