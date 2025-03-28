@@ -3,7 +3,8 @@
 # exit when any command fails
 set -e
 
-# create a tun device if not exist to ensure compatibility with Podman
+# create a tun device if not exist
+# allow passing device to ensure compatibility with Podman
 if [ ! -e /dev/net/tun ]; then
     sudo mkdir -p /dev/net
     sudo mknod /dev/net/tun c 10 200
@@ -39,3 +40,40 @@ if [ ! -f /var/lib/cloudflare-warp/reg.json ]; then
 else
     echo "Warp client already registered, skip registration"
 fi
+
+# disable qlog if DEBUG_ENABLE_QLOG is empty
+if [ -z "$DEBUG_ENABLE_QLOG" ]; then
+    warp-cli --accept-tos debug qlog disable
+else
+    warp-cli --accept-tos debug qlog enable
+fi
+
+# if WARP_ENABLE_NAT is provided, enable NAT and forwarding
+if [ -n "$WARP_ENABLE_NAT" ]; then
+    # switch to warp mode
+    echo "[NAT] Switching to warp mode..."
+    warp-cli --accept-tos mode warp
+    warp-cli --accept-tos connect
+
+    # wait another seconds for the daemon to reconfigure
+    sleep "$WARP_SLEEP"
+
+    # enable NAT
+    echo "[NAT] Enabling NAT..."
+    sudo nft add table ip nat
+    sudo nft add chain ip nat WARP_NAT { type nat hook postrouting priority 100 \; }
+    sudo nft add rule ip nat WARP_NAT oifname "CloudflareWARP" masquerade
+    sudo nft add table ip mangle
+    sudo nft add chain ip mangle forward { type filter hook forward priority mangle \; }
+    sudo nft add rule ip mangle forward tcp flags syn tcp option maxseg size set rt mtu
+
+    sudo nft add table ip6 nat
+    sudo nft add chain ip6 nat WARP_NAT { type nat hook postrouting priority 100 \; }
+    sudo nft add rule ip6 nat WARP_NAT oifname "CloudflareWARP" masquerade
+    sudo nft add table ip6 mangle
+    sudo nft add chain ip6 mangle forward { type filter hook forward priority mangle \; }
+    sudo nft add rule ip6 mangle forward tcp flags syn tcp option maxseg size set rt mtu
+fi
+
+# start the proxy
+gost $GOST_ARGS

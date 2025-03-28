@@ -23,11 +23,15 @@ services:
     image: caomingjun/warp
     container_name: warp
     restart: always
+    # add removed rule back (https://github.com/opencontainers/runc/pull/3468)
+    device_cgroup_rules:
+      - 'c 10:200 rwm'
     ports:
       - "1080:1080"
     environment:
       - WARP_SLEEP=2
       # - WARP_LICENSE_KEY= # optional
+      # - WARP_ENABLE_NAT=1 # enable nat
     cap_add:
       # Docker already have them, these are for podman users
       - MKNOD
@@ -37,6 +41,10 @@ services:
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=0
       - net.ipv4.conf.all.src_valid_mark=1
+      # uncomment for nat
+      # - net.ipv4.ip_forward=1
+      # - net.ipv6.conf.all.forwarding=1
+      # - net.ipv6.conf.all.accept_ra=2
     volumes:
       - ./data:/var/lib/cloudflare-warp
 ```
@@ -58,6 +66,7 @@ You can configure the container through the following environment variables:
 - `GOST_ARGS`: The arguments passed to GOST. The default is `-L :1080`, which means to listen on port 1080 in the container at the same time through HTTP and SOCKS5 protocols. If you want to have UDP support or use advanced features provided by other protocols, you can modify this parameter. For more information, refer to [GOST documentation](https://v2.gost.run/en/). If you modify the port number, you may also need to modify the port mapping in the `docker-compose.yml`.
 - `REGISTER_WHEN_MDM_EXISTS`: If set, will register consumer account (WARP or WARP+, in contrast to Zero Trust) even when `mdm.xml` exists. You usually don't need this, as `mdm.xml` are usually used for Zero Trust. However, some users may want to adjust advanced settings in `mdm.xml` while still using consumer account.
 - `BETA_FIX_HOST_CONNECTIVITY`: If set, will add checks for host connectivity into healthchecks and automatically fix it if necessary. See [host connectivity issue](docs/host-connectivity.md) for more information.
+- `WARP_ENABLE_NAT`: If set, will work as warp mode and turn NAT on. You can route L3 traffic through `warp-docker` to Warp. See [nat gateway](docs/nat-gateway.md) for more information.
 
 Data persistence: Use the host volume `./data` to persist the data of the WARP client. You can change the location of this directory or use other types of volumes. If you modify the `WARP_LICENSE_KEY`, please delete the `./data` directory so that the client can detect and register again.
 
@@ -100,6 +109,22 @@ The default `GOST_ARGS` is `-L :1080`, which provides HTTP and SOCKS5 proxy. If 
 ### How to connect from another container
 
 You may want to use the proxy from another container and find that you cannot connect to `127.0.0.1:1080` in that container. This is because the `docker-compose.yml` only maps the port to the host, not to other containers. To solve this problem, you can use the service name as the hostname, for example, `warp:1080`. You also need to put the two containers in the same docker network.
+
+### "Operation not permitted" when open tun
+
+Error like `{ err: Os { code: 1, kind: PermissionDenied, message: "Operation not permitted" }, context: "open tun" }` is caused by [a updated of containerd](https://github.com/containerd/containerd/releases/tag/v1.7.24). You need to pass the tun device to the container following the [instruction](docs/tun-not-permitted.md).
+
+### NFT error on Synology or QNAP NAS
+
+If you are using Synology or QNAP NAS, you may encounter an error like `Failed to run NFT command`. This is because both Synology and QNAP use old iptables, while WARP uses nftables. It can't be easily fixed since nftables need to be added when the kernel is compiled.
+
+Possible solutions:
+- If you don't need UDP support, use the WAPR's proxy mode by following the instructions in the [documentation](docs/proxy-mode.md).
+- If you need UDP support, run a fully virtualized Linux system (KVM) on your NAS or use another device to run the container.
+
+References that might help:
+- [Related issue](https://github.com/cmj2002/warp-docker/issues/16)
+- [Request of supporting iptables in Cloudflare Community](https://community.cloudflare.com/t/legacy-support-for-docker-containers-running-on-synology-qnap/733983)
 
 ### Container runs well but cannot connect from host
 
